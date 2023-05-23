@@ -4,16 +4,24 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Mesh;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.VertexAttributes;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.g3d.utils.MeshBuilder;
+import com.badlogic.gdx.graphics.g3d.utils.shapebuilders.ArrowShapeBuilder;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Button;
 import com.badlogic.gdx.scenes.scene2d.ui.ImageButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -24,6 +32,7 @@ public class SimScreen implements Screen {
         DEFAULT,
         RUN,
         ADD,
+        SELECT,
         DELETE,
         SET_SPEED,
         SET_MASS
@@ -37,8 +46,11 @@ public class SimScreen implements Screen {
     }
     private MODE currentMode = MODE.DEFAULT;
     private SCUFFED_BUTTON buttonState = SCUFFED_BUTTON.DEFAULT;
+    private boolean choosing = false;
+    private boolean booleanCuzIDKAGoodWayToDoThis = true;
     final PlanetSim game;
     Stage stage;
+    Mesh arrow;
     OrthographicCamera camera;
     Texture planetImage;
     Texture addImage;
@@ -54,7 +66,9 @@ public class SimScreen implements Screen {
     Sound dropSound;
     Circle newPlanet;
     Array<Circle> planets;
-    Array<int[]> parameters;
+    Array<Mesh> arrows;
+    Circle selectedPlanet;
+    Array<double[]> parameters;
     long lastDropTime;
     int dropsGathered;
 
@@ -66,8 +80,8 @@ public class SimScreen implements Screen {
         addImage = new Texture(Gdx.files.internal("addImage1.jpg"));
         deleteImage = new Texture(Gdx.files.internal("trashcan1.jpeg"));
         speedImage = new Texture(Gdx.files.internal("running1.png"));
-        massImage = new Texture(Gdx.files.internal("weight1.png"));
-        cancelImage = new Texture(Gdx.files.internal("cancel1.png"));
+        massImage = new Texture(Gdx.files.internal("weight2.png"));
+        cancelImage = new Texture(Gdx.files.internal("cancel2.png"));
 
 
 
@@ -101,6 +115,7 @@ public class SimScreen implements Screen {
             public void touchUp (InputEvent event, float x, float y, int pointer, int button){
                 currentMode = MODE.DELETE;
                 buttonState = SCUFFED_BUTTON.DEFAULT;
+                choosing = true;
             }
         });
 
@@ -117,6 +132,7 @@ public class SimScreen implements Screen {
             public void touchUp (InputEvent event, float x, float y, int pointer, int button){
                 currentMode = MODE.SET_SPEED;
                 buttonState = SCUFFED_BUTTON.DEFAULT;
+                choosing = true;
             }
         });
 
@@ -144,6 +160,7 @@ public class SimScreen implements Screen {
             public boolean touchDown (InputEvent event, float x, float y, int pointer, int button) {
                 buttonState = SCUFFED_BUTTON.DEFAULT;
                 currentMode = MODE.DEFAULT;
+                choosing = false;
                 return true;
             }
         });
@@ -154,14 +171,15 @@ public class SimScreen implements Screen {
         stage.addActor(speedButton);
         stage.addActor(massButton);
         stage.addActor(cancelButton);
-        Gdx.input.setInputProcessor(stage);
 
+        Gdx.input.setInputProcessor(stage);
 
         camera = new OrthographicCamera();
         camera.setToOrtho(false, 800, 480);
 
         planets = new Array<Circle>();
-        parameters = new Array<int[]>();
+        parameters = new Array<double[]>();
+        arrows = new Array<Mesh>();
 
     }
 
@@ -170,45 +188,72 @@ public class SimScreen implements Screen {
             Vector3 touchPos = new Vector3();
             touchPos.set(Gdx.input.getX(), Gdx.input.getY(), 0);
             camera.unproject(touchPos);
-            newPlanet.radius = 32;
-            newPlanet.x = touchPos.x-planetImage.getWidth()/2;
-            newPlanet.y = touchPos.y-planetImage.getHeight()/2;
+            newPlanet.radius = 16;
+            newPlanet.x = touchPos.x;
+            newPlanet.y = touchPos.y;
 
             planets.add(newPlanet);
-            parameters.add(new int[5]);
+            parameters.add(new double[]{10, 0, 0, 0, 0});
             currentMode = MODE.DEFAULT;
         }
     }
     private void choosePlanet(){
-        if(Gdx.input.isTouched()){
-            Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
-            camera.unproject(touchPos);
-            for(Circle planet : planets){
-                if(planet.contains(touchPos.x,touchPos.y)){
-                    switch(currentMode){
-                        case DELETE:
-                            deletePlanet(planet);
-                            break;
-                        case SET_SPEED:
-                            break;
-                        case SET_MASS:
-                            break;
+        if(booleanCuzIDKAGoodWayToDoThis){
+            booleanCuzIDKAGoodWayToDoThis = false;
+            System.out.println("yep");
+            stage.addListener(new ClickListener(){
+                @Override
+                public void touchUp(InputEvent event, float x, float y, int pointer, int button){
+                    booleanCuzIDKAGoodWayToDoThis = true;
+                    for(Circle planet : planets){
+                        if(planet.contains(x,y)){
+                            selectedPlanet = planet;
+                            choosing = false;
+                        }
                     }
 
                 }
-            }
+            });
         }
+
     }
-    private void deletePlanet(Circle planet){
-        parameters.removeIndex(planets.indexOf(planet,true));
-        planets.removeValue(planet,true);
+    private void deletePlanet(){
+        parameters.removeIndex(planets.indexOf(selectedPlanet, true));
+        planets.removeValue(selectedPlanet, true);
+        selectedPlanet = null;
         currentMode = MODE.DEFAULT;
+    }
+
+    private void setSpeed(){
+        Vector3 touchPos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(touchPos);
+        MeshBuilder meshbuilder = new MeshBuilder();
+        meshbuilder.setColor(Color.GREEN);
+        meshbuilder.setUVRange(0.5f, 0f, 0f, 0.5f);
+        meshbuilder.begin(VertexAttributes.Usage.Position | VertexAttributes.Usage.Normal | VertexAttributes.Usage.ColorUnpacked, GL20.GL_TRIANGLES);
+        ArrowShapeBuilder.build(
+                meshbuilder,
+                selectedPlanet.x, selectedPlanet.y, 0,
+                touchPos.x, touchPos.y, 0,
+                0.1f,
+                0.2f,
+                10
+);
+        arrow = meshbuilder.end();
+        arrow.render(game.batch.getShader(), GL20.GL_TRIANGLES);
+        if(Gdx.input.isTouched()){
+            arrows.add(arrow);
+            double[] planetParameters = parameters.get(planets.indexOf(selectedPlanet, true));
+            planetParameters[1] = touchPos.x-selectedPlanet.x;
+            planetParameters[2] = touchPos.y-selectedPlanet.y;
+            currentMode = MODE.DEFAULT;
+        }
     }
 
 
     @Override
     public void render(float delta) {
-        ScreenUtils.clear(0, 0, 0.2f, 1);
+        ScreenUtils.clear(1f, 1f, 1f, 0);
 
         camera.update();
 
@@ -216,24 +261,32 @@ public class SimScreen implements Screen {
 
         game.batch.begin();
         for(Circle planet : planets){
-            game.batch.draw(planetImage,planet.x,planet.y);
+            game.batch.draw(planetImage,planet.x-planet.radius,planet.y-planet.radius);
         }
         game.batch.end();
 
+        for(Mesh arrow : arrows){
+            arrow.render(game.batch.getShader(), GL20.GL_TRIANGLES);
+        }
         stage.act();
         stage.draw();
 
-        switch(currentMode){
-            case ADD:
-                addPlanet();
-                break;
-            case DELETE:
-                choosePlanet();
-                break;
-            case SET_SPEED:
-                break;
-            case DEFAULT:
-                break;
+        if(choosing){
+            choosePlanet();
+        }else{
+            switch(currentMode) {
+                case ADD:
+                    addPlanet();
+                    break;
+                case DELETE:
+                    deletePlanet();
+                    break;
+                case SET_SPEED:
+                    setSpeed();
+                    break;
+                case DEFAULT:
+                    break;
+            }
         }
 
 
